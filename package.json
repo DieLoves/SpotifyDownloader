@@ -1,16 +1,24 @@
 {
   "name": "playlistdownloader",
   "version": "1.0.0",
-  "description": "",
+  "description": "This is SpotifyDownloader",
   "main": "download.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node download.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "DieLoves",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.6.1",
     "dotenv": "^16.3.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DieLoves/SpotifyDownloader.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DieLoves/SpotifyDownloader/issues"
+  },
+  "homepage": "https://github.com/DieLoves/SpotifyDownloader#readme"
 }
