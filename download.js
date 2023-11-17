@@ -173,7 +173,7 @@ function format(title, isAuthor = false) {
             title_trim = title_trim.slice(0, title_trim.length - 1)
         }
     }
-    if (isAuthor) {
+    if (isAuthor && title_trim.length > 150) {
         title_trim = title_trim.split(", ")[0]
     }
     return title_trim
