@@ -114,7 +114,7 @@ function getStream(id) {
                 headers
             })
             resolve({
-                name: format(answer.data.metadata.artists + " - " + answer.data.metadata.title),
+                name: format(answer.data.metadata.artists, true) + " - " + format(answer.data.metadata.title),
                 link: answer.data.link
             })
         } catch (e) {
@@ -156,14 +156,15 @@ function load(title, url, album_name) {
     })
 }
 
-function format(title) {
+function format(title, isAuthor = false) {
     function escapeRegExp(str) {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
-    const list_blocked_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|", "+", "%", "!", "@"]
+    const list_blocked_chars = ["\\", "/", ":", "*", "?", '"', "<", ">", "|", "+", "%", "!", "@", ","]
     const list_blocked_end_string = ["."]
     let title_trim = title.trim()
     for (const char of list_blocked_chars) {
+        if (isAuthor && char == ",") continue
         const escapedChar = escapeRegExp(char);
         title_trim = title_trim.replace(new RegExp(escapedChar  , "gi"), "_");
     }
@@ -171,6 +172,9 @@ function format(title) {
         if (title_trim.endsWith(char)) {
             title_trim = title_trim.slice(0, title_trim.length - 1)
         }
+    }
+    if (isAuthor) {
+        title_trim = title_trim.split(", ")[0]
     }
     return title_trim
 }
