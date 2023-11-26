@@ -3,7 +3,8 @@ require("dotenv").config()
 const axios = require('axios');
 const fs = require('fs');
 const { URL } = require("url");
-console.log(process.env)
+const NodeID3 = require('node-id3');
+const { verify } = require("crypto");
 
 const headers = {
     "User-Agent": getUserAgent(),
@@ -25,21 +26,47 @@ if (!process.env.INDEX_START) new Error("INDEX_START not found")
 if (!process.env.INTERVAL) new Error("INTERVAL not found")
 if (!process.env.USER_AGENT) new Error("USER_AGENT not found")
 if (!process.env.PATH_TO_RANDOM_USER_AGENT) new Error("PATH_TO_RANDOM_USER_AGENT not found")
+if (!process.env.INTERVAL_RANDOM_FROM) new Error("INTERVAL_RANDOM_FROM not found")
+if (!process.env.INTERVAL_RANDOM_TO) new Error("INTERVAL_RANDOM_TO not found")
+if (!process.env.DOWNLOAD_IMAGE_ALBUM) new Error("DOWNLOAD_IMAGE_ALBUM not found")
 
-const urlComponents = new URL(process.env.SPOTIFY_URL)
 
-async function main() {
-    if (urlComponents.host != "open.spotify.com" || urlComponents.pathname.split("/").length < 3 || !["track", "playlist"].includes(urlComponents.pathname.split("/")[1])) new Error("SPOTIFY_URL host not specified")
-    const id = urlComponents.pathname.split("/")[2]
-    const type = urlComponents.pathname.split("/")[1]
-    const stageParams = await getTrackOrPlaylist(id,type)
-    stage2(stageParams.title, stageParams.tracklist)
+// const proxy = process.env.USE_PROXY == "true" ? process.env.PROXY_DATA == "random" ? verify(getRandomProxy(process.env.PROXY_LIST_PATH, process.env.PROXY_PROTOCOL)) : verify({ protocol: process.env.PROXY_PROTOCOL, host: process.env.PROXY_DATA.split(":")[0], port: process.env.PROXY_DATA.split(":")[1]}) : false
+
+let urlComponents
+
+try {
+    urlComponents = new URL(process.env.SPOTIFY_URL)
+} catch (e) {
+    console.error("This is...id?")
 }
 
-async function stage2(name, list) {
+async function main() {
+    if (!urlComponents || urlComponents.host == "spotify.link") {
+        console.log("Loading...please wait... (max. 20 seconds)")
+        const { id, type } = await convert(process.env.SPOTIFY_URL, !urlComponents)
+        const stageParams = await getTrackOrPlaylist(id,type)
+        stage2(stageParams.title, stageParams.tracklist, stageParams.cover)
+    } else if (urlComponents.host != "open.spotify.com" || urlComponents.pathname.split("/").length < 3 || !["track", "playlist"].includes(urlComponents.pathname.split("/")[1])) new Error("SPOTIFY_URL host not specified")
+    else {
+        const id = urlComponents.pathname.split("/")[2]
+        const type = urlComponents.pathname.split("/")[1]
+        const stageParams = await getTrackOrPlaylist(id,type)
+        stage2(stageParams.title, stageParams.tracklist, stageParams.cover)
+    }
+}
+
+async function stage2(name, list, cover) {
     if (!fs.existsSync(process.env.DIR_NAME_TO_DOWNLOAD)) fs.mkdirSync(process.env.DIR_NAME_TO_DOWNLOAD)
     if (!fs.existsSync(process.env.DIR_NAME_TO_DOWNLOAD + "/" + name)) fs.mkdirSync(process.env.DIR_NAME_TO_DOWNLOAD + "/" + format(name))
 
+    if (process.env.DOWNLOAD_IMAGE_ALBUM == "true") {
+        await axios(cover, {
+            headers,
+            responseType: "arraybuffer"
+        }).then((res) => fs.writeFileSync(process.env.DIR_NAME_TO_DOWNLOAD + "/" + format(name) + "/albumImage.png", res.data))
+        .catch((err) => console.log())
+    }
     const start_time = Date.now()
     const length = list.length
     list.splice(0, process.env.INDEX_START <= 0 ? 0 : process.env.INDEX_START - 1)
@@ -47,9 +74,9 @@ async function stage2(name, list) {
 
     for (const item of list) {
         count++
-        const inter = process.env.INTERVAL.toLowerCase() == "random" ? getRandomNumber(1500, 4500) : process.env.INTERVAL
+        const inter = process.env.INTERVAL.toLowerCase() == "random" ? getRandomNumber(process.env.INTERVAL_RANDOM_FROM, process.env.INTERVAL_RANDOM_TO) : process.env.INTERVAL
         console.log(`[${count}/${length}]: Start download ${format(`${item.artists} - ${item.title}`)} (${item.id}). Interval: ${inter}`)
-        await start(item.id, name)
+        await start(item.id, name, item.cover)
         await timeout(inter)
     }
 
@@ -62,10 +89,10 @@ function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min) + min);
 }
 
-function start(id, album_name) {
+function start(id, album_name, cover) {
     return new Promise(async (resolve, reject) => {
         const link = await getStream(id)
-        await load(link.name, link.link, album_name)
+        await load(link.name, link.link, album_name, cover)
         resolve(true)
     })
 }
@@ -92,16 +119,41 @@ function getTrackOrPlaylist(id, type) {
                 })
                 resolve({
                     title: answer.data.title,
+                    cover: answer.data.cover,
                     tracklist: tracklist.data.trackList
                 })
             } else {
                 resolve({
                     title: answer.data.album,
+                    cover: answer.data.cover,
                     tracklist: [answer.data]
                 })
             }
         } catch (e) {
             reject(e)
+        }
+    })
+}
+
+function convert(id, isID) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            console.log(`https://spotify.link/${id}`)
+            const answer = await axios(`https://api.spotifydown.com/convertUrl/${isID ? encodeURIComponent(`https://spotify.link/${id}`) : encodeURIComponent(id)}`, {
+                method: "get",
+                headers
+            })
+            console.log({
+                type: answer.data.type,
+                id: answer.data.id
+            })   
+            resolve({
+                type: answer.data.type,
+                id: answer.data.id
+            })   
+        } catch (e) {
+            console.error(e)
+            reject("URL invalid")
         }
     })
 }
@@ -123,7 +175,7 @@ function getStream(id) {
     })
 }
 
-function load(title, url, album_name) {
+function load(title, url, album_name, cover) {
     return new Promise(async (resolve, reject) => {
         try {
             const response = await axios({
@@ -132,16 +184,28 @@ function load(title, url, album_name) {
                 responseType: "stream",
                 headers
               });
+
+            const path_to_dir = `${process.env.DIR_NAME_TO_DOWNLOAD}/${album_name}`
+            const path = `${process.env.DIR_NAME_TO_DOWNLOAD}/${album_name}/${title}.mp3`
             
             // Создаем поток для записи файла
-            const fileStream = fs.createWriteStream(`${process.env.DIR_NAME_TO_DOWNLOAD}/${album_name}/${title}.mp3`);
+            const fileStream = fs.createWriteStream(path);
         
             // Подписываемся на события для обработки данных и ошибок
             response.data.pipe(fileStream);
 
-            resolve(new Promise((resolve, reject) => {
-                fileStream.on('finish', () => {
-                  console.log(`Файл успешно загружен по пути: ${`${process.env.DIR_NAME_TO_DOWNLOAD}/${album_name}/${title}.mp3`}`);
+            resolve(new Promise(async (resolve, reject) => {
+                fileStream.on('finish', async () => {
+                  console.log(`Файл успешно загружен по пути: ${path}`);
+                  if (cover) {
+                    await downloadCover(path_to_dir + `/${title}.png`, cover)
+                    
+                    const success = NodeID3.write({ APIC: path_to_dir + `/${title}.png` }, path)
+                    if (!success) {
+                        console.error(`Failed to write cover`)
+                    }
+                    fs.rmSync(path_to_dir + `/${title}.png`)
+                  }
                   resolve();
                 });
             
@@ -153,6 +217,19 @@ function load(title, url, album_name) {
         } catch (e) {
             reject(e)
         }
+    })
+}
+
+function downloadCover(path, cover) {
+    return new Promise(async(resolve, reject) => {
+        await axios(cover, {
+            headers,
+            responseType: "arraybuffer"
+        }).then((res) => {
+            fs.writeFileSync(path, res.data)
+            resolve(true)
+        })
+        .catch((err) => reject(err))
     })
 }
 
@@ -179,11 +256,76 @@ function format(title, isAuthor = false) {
     return title_trim
 }
 
+async function getRandomProxy(path, protocol, isVerify = true) {
+    return new Promise(async (resolve, reject) => {
+        if (isURL(path)) {
+            const proxys = await axios(path)
+            .catch(e => {
+                console.error(`Get proxy list failed: ${e.toString()}`)
+                reject(new Error(e))
+            }) 
+            const proxy_split = proxys.data.toString().split(process.env.PROXY_LIST_SEPARATOR).map(x => x.replaceAll("\r", ""))
+            if (proxy_split && isVerify) {
+                for (const proxy_next of proxy_split) {
+                    const proxy = proxy_next.split(":")
+                    if (!proxy || proxy.length > 2) continue
+                    await axios(headers.Origin, {
+                        proxy: {
+                            host: proxy[0],
+                            port: proxy[1]
+                        }
+                    }).then(res => {
+                        resolve({
+                            host: proxy[0],
+                            port: proxy[1]
+                        })
+                    })
+                    .catch(e => {
+                        console.error(`Proxy ${proxy_next} failed: ${e.toString()}`)
+                    })
+                }
+            }
+        } else {
+            if (!fs.existsSync(path)) new Error("PROXY_LIST must be empty")
+            const proxys = fs.readFileSyn(path).toString().split(process.env.PROXY_LIST_SEPARATOR).map(x => x.replaceAll("\r", ""))
+            if (isVerify) {
+                for (const proxy_next of proxys) {
+                    const proxy = proxy_next.split(":")
+                    if (!proxy || proxy.length > 2) continue
+                    await axios(headers.Origin, {
+                        proxy: {
+                            host: proxy[0],
+                            port: proxy[1]
+                        }
+                    }).then(res => {
+                        resolve({
+                            host: proxy[0],
+                            port: proxy[1]
+                        })
+                    })
+                    .catch(e => {
+                        console.error(`Proxy ${proxy_next} failed: ${e.toString()}`)
+                    })
+                }
+            }
+        }
+    })
+}
+
+function isURL(var1) {
+    try {
+        new URL(var1)
+        return true
+    } catch (e) {
+        return false
+    }
+}
+
 function getUserAgent() {
     if (process.env.USER_AGENT == "random" && !fs.existsSync(process.env.PATH_TO_RANDOM_USER_AGENT)) new Error("USER_AGENT must be empty") 
     if (process.env.USER_AGENT == "random") {
         console.log(process.env.PATH_TO_RANDOM_USER_AGENT)
-        const userAgents = fs.readFileSync(process.env.PATH_TO_RANDOM_USER_AGENT).toString().split(process.env.USER_AGENT_SEPARATOR)
+        const userAgents = fs.readFileSync(process.env.PATH_TO_RANDOM_USER_AGENT).toString().split(process.env.USER_AGENT_SEPARATOR).map(x => x.replaceAll("\r", ""))
         return userAgents[getRandomNumber(0, userAgents.length - 1)]
     } else {
         return process.env.USER_AGENT

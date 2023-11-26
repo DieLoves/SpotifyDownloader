@@ -4,14 +4,16 @@
   "description": "This is SpotifyDownloader",
   "main": "download.js",
   "scripts": {
-    "start": "node download.js"
+    "start": "npm i && node download.js",
+    "defstart": "node download.js"
   },
   "keywords": [],
   "author": "DieLoves",
   "license": "ISC",
   "dependencies": {
     "axios": "^1.6.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "node-id3": "^0.2.6"
   },
   "repository": {
     "type": "git",
