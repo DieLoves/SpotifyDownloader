@@ -29,6 +29,7 @@ if (!process.env.PATH_TO_RANDOM_USER_AGENT) new Error("PATH_TO_RANDOM_USER_AGENT
 if (!process.env.INTERVAL_RANDOM_FROM) new Error("INTERVAL_RANDOM_FROM not found")
 if (!process.env.INTERVAL_RANDOM_TO) new Error("INTERVAL_RANDOM_TO not found")
 if (!process.env.DOWNLOAD_IMAGE_ALBUM) new Error("DOWNLOAD_IMAGE_ALBUM not found")
+if (!process.env.SPECIFY_AUTHOR_IN_TITLE) new Error("SPECIFY_AUTHOR_IN_TITLE not found")
 
 
 // const proxy = process.env.USE_PROXY == "true" ? process.env.PROXY_DATA == "random" ? verify(getRandomProxy(process.env.PROXY_LIST_PATH, process.env.PROXY_PROTOCOL)) : verify({ protocol: process.env.PROXY_PROTOCOL, host: process.env.PROXY_DATA.split(":")[0], port: process.env.PROXY_DATA.split(":")[1]}) : false
@@ -166,7 +167,7 @@ function getStream(id) {
                 headers
             })
             resolve({
-                name: format(answer.data.metadata.artists, true) + " - " + format(answer.data.metadata.title),
+                name: Boolean(process.env.SPECIFY_AUTHOR_IN_TITLE) ? format(answer.data.metadata.artists, true) + " - " + format(answer.data.metadata.title) : format(answer.data.metadata.title),
                 link: answer.data.link
             })
         } catch (e) {
