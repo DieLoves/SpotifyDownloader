@@ -167,7 +167,7 @@ function getStream(id) {
                 headers
             })
             resolve({
-                name: Boolean(process.env.SPECIFY_AUTHOR_IN_TITLE) ? format(answer.data.metadata.artists, true) + " - " + format(answer.data.metadata.title) : format(answer.data.metadata.title),
+                name: process.env.SPECIFY_AUTHOR_IN_TITLE == "true" ? format(answer.data.metadata.artists, true) + " - " + format(answer.data.metadata.title) : format(answer.data.metadata.title),
                 link: answer.data.link
             })
         } catch (e) {
