@@ -47,7 +47,7 @@ async function main() {
         const { id, type } = await convert(process.env.SPOTIFY_URL, !urlComponents)
         const stageParams = await getTrackOrPlaylist(id,type)
         stage2(stageParams.title, stageParams.tracklist, stageParams.cover)
-    } else if (urlComponents.host != "open.spotify.com" || urlComponents.pathname.split("/").length < 3 || !["track", "playlist"].includes(urlComponents.pathname.split("/")[1])) new Error("SPOTIFY_URL host not specified")
+    } else if (urlComponents.host != "open.spotify.com" || urlComponents.pathname.split("/").length < 3 || !["track", "playlist", "album"].includes(urlComponents.pathname.split("/")[1])) new Error("SPOTIFY_URL host not specified")
     else {
         const id = urlComponents.pathname.split("/")[2]
         const type = urlComponents.pathname.split("/")[1]
@@ -76,7 +76,7 @@ async function stage2(name, list, cover) {
         count++
         const inter = process.env.INTERVAL.toLowerCase() == "random" ? getRandomNumber(process.env.INTERVAL_RANDOM_FROM, process.env.INTERVAL_RANDOM_TO) : process.env.INTERVAL
         console.log(`[${count}/${length}]: Start download ${format(`${item.artists} - ${item.title}`)} (${item.id}). Interval: ${inter}`)
-        await start(item.id, name, item.cover)
+        await start(item.id, name, item.cover, item.artists)
         await timeout(inter)
     }
 
@@ -89,10 +89,10 @@ function getRandomNumber(min, max) {
     return Math.floor(Math.random() * (max - min) + min);
 }
 
-function start(id, album_name, cover) {
+function start(id, album_name, cover, artists) {
     return new Promise(async (resolve, reject) => {
         const link = await getStream(id)
-        await load(link.name, link.link, album_name, cover)
+        await load(link.name, link.link, album_name, cover, artists)
         resolve(true)
     })
 }
@@ -113,8 +113,8 @@ function getTrackOrPlaylist(id, type) {
                 console.log(answer.data)
                 process.exit(0)
             }
-            if (type == "playlist") {
-                const tracklist = await axios(`https://api.spotifydown.com/trackList/playlist/${id}`, {
+            if (type == "playlist" || type == "album") {
+                const tracklist = await axios(`https://api.spotifydown.com/trackList/${type}/${id}`, {
                     headers
                 })
                 resolve({
@@ -175,7 +175,7 @@ function getStream(id) {
     })
 }
 
-function load(title, url, album_name, cover) {
+function load(title, url, album_name, cover, artist) {
     return new Promise(async (resolve, reject) => {
         try {
             const response = await axios({
@@ -200,7 +200,7 @@ function load(title, url, album_name, cover) {
                   if (cover) {
                     await downloadCover(path_to_dir + `/${title}.png`, cover)
                     
-                    const success = NodeID3.write({ APIC: path_to_dir + `/${title}.png` }, path)
+                    const success = NodeID3.write({ APIC: path_to_dir + `/${title}.png`, album: album_name, artist }, path)
                     if (!success) {
                         console.error(`Failed to write cover`)
                     }
